@@ -1,0 +1,6 @@
+networks:
+    default: ftm-main
+    development:
+        cmd_settings:
+            unlock:
+                - 0x8A2738252bE6Eeb8F1eD0a302c61E7a81b09f48C
