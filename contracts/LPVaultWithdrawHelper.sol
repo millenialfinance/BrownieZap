@@ -16,6 +16,9 @@ contract LPVaultWithdrawHelper is IWithdrawHelper, Ownable {
 
   mapping (address => uint256) gasAmount;
 
+  event VaultZap(address vault, address recipient, uint256 amt);
+  event ZapError(address vault, address recipient, uint256 amt);
+
   struct VaultZapData {
     address zapper;
     address from;
@@ -45,23 +48,34 @@ contract LPVaultWithdrawHelper is IWithdrawHelper, Ownable {
 
     if (address(vaultZapData.recipient).balance == 0) {
       require(actualAmount > gasAmount[wd.assetId]);
-      amt = actualAmount.sub(gasAmount[wd.assetId]);
-      IZap(vaultZapData.zapper).swapToNative(
+      try IZap(vaultZapData.zapper).swapToNative(
           wd.assetId,
           gasAmount[wd.assetId],
           vaultZapData.router,
           vaultZapData.recipient
-      );
+      ) {
+        amt = actualAmount.sub(gasAmount[wd.assetId]);
+      } catch {
+        ERC20(wd.assetId).transfer(vaultZapData.recipient, ERC20(wd.assetId).balanceOf(address(this)));
+        emit ZapError(vaultZapData.vault, vaultZapData.recipient, amt);
+        return;
+      }
     }
 
-    IZap(vaultZapData.zapper).zapInTokenToLPVault(
+    try IZap(vaultZapData.zapper).zapInTokenToLPVault(
         vaultZapData.from,
         amt,
         vaultZapData.to,
         vaultZapData.router,
         vaultZapData.vault,
         vaultZapData.recipient
-      );
+      ) {
+      emit VaultZap(vaultZapData.vault, vaultZapData.recipient, actualAmount);
+    } catch {
+      ERC20(wd.assetId).transfer(vaultZapData.recipient, ERC20(wd.assetId).balanceOf(address(this)));
+      emit ZapError(vaultZapData.vault, vaultZapData.recipient, amt);
+      return;
+    }
   }
     /* ========== RESTRICTED FUNCTIONS ========== */
 
@@ -70,7 +84,6 @@ contract LPVaultWithdrawHelper is IWithdrawHelper, Ownable {
             payable(owner()).transfer(address(this).balance);
             return;
         }
-
         ERC20(token).transfer(owner(), ERC20(token).balanceOf(address(this)));
     }
 }

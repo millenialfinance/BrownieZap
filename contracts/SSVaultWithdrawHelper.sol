@@ -17,6 +17,9 @@ contract SSVaultWithdrawHelper is IWithdrawHelper, Ownable {
 
   mapping (address => uint256) gasAmount;
 
+  event VaultZap(address vault, address recipient, uint256 amt);
+  event ZapError(address vault, address recipient, uint256 amt);
+
   struct VaultZapData {
     address zapper;
     address from;
@@ -46,23 +49,34 @@ contract SSVaultWithdrawHelper is IWithdrawHelper, Ownable {
 
     if (address(vaultZapData.recipient).balance == 0) {
       require(actualAmount > gasAmount[wd.assetId]);
-      amt = actualAmount.sub(gasAmount[wd.assetId]);
-      IZap(vaultZapData.zapper).swapToNative(
+      try IZap(vaultZapData.zapper).swapToNative(
           wd.assetId,
           gasAmount[wd.assetId],
           vaultZapData.router,
           vaultZapData.recipient
-      );
+      ) {
+        amt = actualAmount.sub(gasAmount[wd.assetId]);
+      } catch {
+        ERC20(wd.assetId).transfer(vaultZapData.recipient, ERC20(wd.assetId).balanceOf(address(this)));
+        emit ZapError(vaultZapData.vault, vaultZapData.recipient, amt);
+        return;
+      }
     }
 
-    IZap(vaultZapData.zapper).zapInTokenToSSVault(
+    try IZap(vaultZapData.zapper).zapInTokenToSSVault(
         vaultZapData.from,
-        actualAmount,
+        amt,
         vaultZapData.to,
         vaultZapData.router,
         vaultZapData.vault,
         vaultZapData.recipient
-      );
+      ) {
+      emit VaultZap(vaultZapData.vault, vaultZapData.recipient, actualAmount);
+    } catch {
+      ERC20(wd.assetId).transfer(vaultZapData.recipient, ERC20(wd.assetId).balanceOf(address(this)));
+      emit ZapError(vaultZapData.vault, vaultZapData.recipient, amt);
+      return;
+    }
   }
     /* ========== RESTRICTED FUNCTIONS ========== */
 
