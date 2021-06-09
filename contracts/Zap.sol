@@ -51,6 +51,8 @@ contract Zap is Ownable {
     uint16 MIN_AMT;
     mapping(address => mapping(address => address)) private tokenBridgeForRouter;
 
+    event FeeChange(address fee_to, uint16 rate, uint16 min);
+
     mapping (address => bool) public useNativeRouter;
 
     constructor(address _WNATIVE) Ownable() {
@@ -202,7 +204,7 @@ contract Zap is Ownable {
     function swapToNative(address _from, uint amount, address routerAddr, address _recipient) external {
         IERC20(_from).safeTransferFrom(msg.sender, address(this), amount);
         _approveTokenIfNeeded(_from, routerAddr);
-        uint amt = _swapTokenForNative(_from, amount, _recipient, routerAddr);
+        _swapTokenForNative(_from, amount, _recipient, routerAddr);
     }
 
 
@@ -389,8 +391,10 @@ contract Zap is Ownable {
     }
 
     function setFee(address addr, uint16 rate, uint16 min) external onlyOwner {
+        require(rate >= 25, "FEE TOO HIGH; MAX FEE = 4%");
         FEE_TO_ADDR = addr;
         FEE_RATE = rate;
         MIN_AMT = min;
+        emit FeeChange(addr, rate, min);
     }
 }
